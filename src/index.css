@@ -8,33 +8,54 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Professional research tool theme */
+    --background: 220 27% 5%;
+    --foreground: 220 15% 95%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 220 25% 7%;
+    --card-foreground: 220 15% 95%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 220 25% 7%;
+    --popover-foreground: 220 15% 95%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 142 76% 50%;
+    --primary-foreground: 220 27% 5%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 220 20% 12%;
+    --secondary-foreground: 220 15% 85%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 220 20% 10%;
+    --muted-foreground: 220 15% 65%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 45 93% 65%;
+    --accent-foreground: 220 27% 5%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 75% 60%;
+    --destructive-foreground: 220 15% 95%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 220 20% 15%;
+    --input: 220 20% 12%;
+    --ring: 142 76% 50%;
+
+    /* Professional gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(142 76% 40%));
+    --gradient-accent: linear-gradient(135deg, hsl(var(--accent)), hsl(45 93% 55%));
+    --gradient-card: linear-gradient(135deg, hsl(220 25% 7%), hsl(220 25% 9%));
+    
+    /* Security tool colors */
+    --warning: 45 93% 65%;
+    --warning-foreground: 220 27% 5%;
+    --success: 142 76% 50%;
+    --success-foreground: 220 27% 5%;
+    --info: 210 100% 70%;
+    --info-foreground: 220 27% 5%;
+    
+    /* Data visualization colors */
+    --chart-1: 142 76% 50%;
+    --chart-2: 45 93% 65%;
+    --chart-3: 210 100% 70%;
+    --chart-4: 280 100% 70%;
+    --chart-5: 0 75% 60%;
 
     --radius: 0.5rem;
 
