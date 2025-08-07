@@ -333,6 +333,32 @@ export class ECDSAAffineAttack {
    */
   private extractSignatureFromTransaction(tx: any): SignatureData | null {
     try {
+      // Handle Bitcoin transactions
+      if (tx.vin && Array.isArray(tx.vin)) {
+        const signatures: SignatureData[] = [];
+        
+        for (const input of tx.vin) {
+          if (input.scriptSig && input.scriptSig.hex) {
+            const sigData = this.extractBitcoinSignature(input.scriptSig.hex, tx.txid);
+            if (sigData) {
+              return sigData; // Return first valid signature found
+            }
+          }
+          
+          // Handle witness data for SegWit transactions
+          if (input.txinwitness && Array.isArray(input.txinwitness)) {
+            for (const witnessItem of input.txinwitness) {
+              if (witnessItem && witnessItem.length > 140) { // Likely a signature
+                const sigData = this.extractBitcoinSignature(witnessItem, tx.txid);
+                if (sigData) {
+                  return sigData;
+                }
+              }
+            }
+          }
+        }
+      }
+
       // Handle Ethereum transactions
       if (tx.v !== undefined && tx.r !== undefined && tx.s !== undefined) {
         const r = typeof tx.r === 'string' ? BigInt(tx.r) : BigInt(tx.r);
@@ -357,18 +383,119 @@ export class ECDSAAffineAttack {
         };
       }
 
-      // Handle Bitcoin transactions (simplified)
-      if (tx.hex && tx.vin) {
-        // This would need more complex parsing for real Bitcoin transactions
-        // For now, return null to indicate unsupported
-        return null;
-      }
-
       return null;
     } catch (error) {
       console.error('Error extracting signature:', error);
       return null;
     }
+  }
+
+  /**
+   * Extract ECDSA signature from Bitcoin script hex
+   */
+  private extractBitcoinSignature(scriptHex: string, txid: string): SignatureData | null {
+    try {
+      // Remove 0x prefix if present
+      const hex = scriptHex.startsWith('0x') ? scriptHex.slice(2) : scriptHex;
+      
+      // Look for DER-encoded signatures (starts with 0x30)
+      const derMatches = hex.match(/30[0-9a-f]{4,140}/gi);
+      if (!derMatches || derMatches.length === 0) {
+        return null;
+      }
+
+      const derSig = derMatches[0];
+      
+      // Parse DER signature
+      const signature = this.parseDERSignature(derSig);
+      if (!signature) {
+        return null;
+      }
+
+      // Create a mock message hash (in real implementation, would calculate sighash)
+      const messageHash = this.hashMessage(new TextEncoder().encode(txid));
+      const messageBytes = new TextEncoder().encode(txid);
+
+      return {
+        message: messageBytes,
+        messageHash,
+        r: signature.r,
+        s: signature.s,
+        txHash: txid,
+        scriptType: 'bitcoin',
+        signatureType: 'ecdsa'
+      };
+    } catch (error) {
+      console.error('Error extracting Bitcoin signature:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Parse DER-encoded ECDSA signature
+   */
+  private parseDERSignature(derHex: string): { r: bigint; s: bigint } | null {
+    try {
+      const bytes = this.hexToBytes(derHex);
+      
+      if (bytes.length < 6 || bytes[0] !== 0x30) {
+        return null;
+      }
+
+      let offset = 2; // Skip 0x30 and length byte
+      
+      // Parse r value
+      if (bytes[offset] !== 0x02) return null;
+      offset++;
+      
+      const rLength = bytes[offset];
+      offset++;
+      
+      const rBytes = bytes.slice(offset, offset + rLength);
+      const r = this.bytesToBigInt(rBytes);
+      offset += rLength;
+      
+      // Parse s value
+      if (bytes[offset] !== 0x02) return null;
+      offset++;
+      
+      const sLength = bytes[offset];
+      offset++;
+      
+      const sBytes = bytes.slice(offset, offset + sLength);
+      const s = this.bytesToBigInt(sBytes);
+      
+      if (r === 0n || s === 0n || r >= this.curveOrder || s >= this.curveOrder) {
+        return null;
+      }
+      
+      return { r, s };
+    } catch (error) {
+      console.error('Error parsing DER signature:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Convert hex string to bytes
+   */
+  private hexToBytes(hex: string): Uint8Array {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < hex.length; i += 2) {
+      bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+    }
+    return bytes;
+  }
+
+  /**
+   * Convert bytes to BigInt
+   */
+  private bytesToBigInt(bytes: Uint8Array): bigint {
+    let result = 0n;
+    for (let i = 0; i < bytes.length; i++) {
+      result = (result << 8n) + BigInt(bytes[i]);
+    }
+    return result;
   }
 
   /**
@@ -380,25 +507,87 @@ export class ECDSAAffineAttack {
     }
 
     try {
-      const response = await fetch(this.chainstackUrl, {
+      // Check if this is a Bitcoin node URL
+      const isBitcoinNode = this.chainstackUrl.includes('bitcoin') || this.chainstackUrl.includes('btc');
+      
+      if (isBitcoinNode) {
+        // Use Bitcoin RPC methods
+        const response = await fetch(this.chainstackUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(this.chainstackApiKey && { 'Authorization': `Bearer ${this.chainstackApiKey}` })
+          },
+          body: JSON.stringify({
+            jsonrpc: '1.0',
+            method: 'getblock',
+            params: [await this.getBitcoinBlockHash(blockNumber), 2], // verbosity 2 for full transaction data
+            id: 1
+          })
+        });
+
+        const data = await response.json();
+        if (data.error) {
+          console.error(`Bitcoin RPC error:`, data.error);
+          return null;
+        }
+        return data.result;
+      } else {
+        // Use Ethereum RPC methods
+        const response = await fetch(this.chainstackUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(this.chainstackApiKey && { 'Authorization': `Bearer ${this.chainstackApiKey}` })
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'eth_getBlockByNumber',
+            params: [`0x${blockNumber.toString(16)}`, true],
+            id: 1
+          })
+        });
+
+        const data = await response.json();
+        if (data.error) {
+          console.error(`Ethereum RPC error:`, data.error);
+          return null;
+        }
+        return data.result;
+      }
+    } catch (error) {
+      console.error(`Error fetching block ${blockNumber}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get Bitcoin block hash by height
+   */
+  private async getBitcoinBlockHash(blockHeight: number): Promise<string> {
+    try {
+      const response = await fetch(this.chainstackUrl!, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(this.chainstackApiKey && { 'Authorization': `Bearer ${this.chainstackApiKey}` })
         },
         body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'eth_getBlockByNumber',
-          params: [`0x${blockNumber.toString(16)}`, true],
+          jsonrpc: '1.0',
+          method: 'getblockhash',
+          params: [blockHeight],
           id: 1
         })
       });
 
       const data = await response.json();
+      if (data.error) {
+        throw new Error(`Error getting block hash: ${data.error.message}`);
+      }
       return data.result;
     } catch (error) {
-      console.error(`Error fetching block ${blockNumber}:`, error);
-      return null;
+      console.error(`Error getting Bitcoin block hash:`, error);
+      throw error;
     }
   }
 
