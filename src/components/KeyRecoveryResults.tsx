@@ -24,6 +24,7 @@ export interface RecoveryResult {
   executionTime: number;
   confidence: number;
   signaturesUsed: number;
+  scriptType?: string; // Bitcoin: p2pkh, p2sh, p2wpkh, etc. Ethereum: ethereum
   affineParams?: { a: number; b: number };
   errorMessage?: string;
   validationResults?: {
@@ -50,7 +51,19 @@ export const KeyRecoveryResults = ({ results, isRunning, currentProgress = 0 }: 
     });
   };
 
-  const formatKey = (key: string) => {
+  const formatKey = (key: string, scriptType?: string) => {
+    // Bitcoin private keys should be displayed in WIF format or as 64-char hex
+    if (scriptType && (scriptType.includes('bitcoin') || scriptType.includes('p2'))) {
+      // Bitcoin private key formatting
+      if (key.length === 64) {
+        return `${key.slice(0, 8)}...${key.slice(-8)} (Bitcoin)`;
+      }
+      if (key.length > 50) {
+        return `${key.slice(0, 8)}...${key.slice(-8)} (Bitcoin WIF)`;
+      }
+    }
+    
+    // Ethereum/general formatting
     if (key.length > 20) {
       return `${key.slice(0, 10)}...${key.slice(-10)}`;
     }
@@ -216,10 +229,10 @@ export const KeyRecoveryResults = ({ results, isRunning, currentProgress = 0 }: 
                             Confidence: {result.confidence.toFixed(1)}%
                           </Badge>
                         </div>
-                        <div className="flex items-center gap-2 p-2 rounded bg-background/50 border">
-                          <code className="flex-1 text-xs font-mono text-success break-all">
-                            {formatKey(result.recoveredKey)}
-                          </code>
+                         <div className="flex items-center gap-2 p-2 rounded bg-background/50 border">
+                           <code className="flex-1 text-xs font-mono text-success break-all">
+                             {formatKey(result.recoveredKey, result.scriptType)}
+                           </code>
                           <Button
                             size="sm"
                             variant="ghost"
